@@ -1,13 +1,13 @@
 package main
 
 import (
-	"fmt"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/gorilla/mux"
 	"gopkg.in/yaml.v3"
@@ -27,7 +27,9 @@ type Config struct {
 func proxyIt(proxyItem *ProxyItem, writer http.ResponseWriter, request *http.Request) {
 	remote, err := url.Parse(proxyItem.Target)
 	if err != nil {
-		fmt.Println(err)
+		log.Println("parse", proxyItem.Target, "failed:", err)
+
+		return
 	}
 
 	proxy := httputil.NewSingleHostReverseProxy(remote)
@@ -40,16 +42,16 @@ func main() {
 
 	d, err := os.ReadFile("http_proxy_config.yaml")
 	if err != nil {
-		panic("no config file:" + err.Error())
+		log.Panicln("no config file:", err.Error())
 	}
 
 	err = yaml.Unmarshal(d, &cfg)
 	if err != nil {
-		panic("invalid config file:" + err.Error())
+		log.Panicln("invalid config file:", err.Error())
 	}
 
 	if cfg.StaticFs == "" {
-		panic("no static fs config")
+		log.Panicln("no static fs config")
 	}
 
 	r := mux.NewRouter()
@@ -60,12 +62,22 @@ func main() {
 		r.PathPrefix(item.Prefix).HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 			proxyIt(item, writer, request)
 		})
+
+		log.Println("proxy item: " + item.Prefix + " => " + item.Target)
 	}
 
+	log.Println("dest dir:", cfg.StaticFs)
 	r.PathPrefix("/").Handler(http.FileServer(http.Dir(cfg.StaticFs)))
 
-	log.Print("Listening on :" + cfg.Listen + "...")
-	err = http.ListenAndServe(cfg.Listen, r)
+	log.Println("Listening on :" + cfg.Listen + "...")
+
+	server := &http.Server{
+		Addr:        cfg.Listen,
+		Handler:     r,
+		ReadTimeout: time.Second,
+	}
+	err = server.ListenAndServe()
+
 	if err != nil {
 		log.Fatal(err)
 	}
