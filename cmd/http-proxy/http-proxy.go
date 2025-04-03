@@ -37,7 +37,7 @@ func proxyIt(proxyItem *ProxyItem, writer http.ResponseWriter, request *http.Req
 	proxy.ServeHTTP(writer, request)
 }
 
-func main() {
+func loadConfig() *Config {
 	var cfg Config
 
 	d, err := os.ReadFile("http_proxy_config.yaml")
@@ -54,9 +54,15 @@ func main() {
 		log.Panicln("no static fs config")
 	}
 
+	return &cfg
+}
+
+func main() {
+	cfg := loadConfig()
+
 	r := mux.NewRouter()
 
-	for idx := 0; idx < len(cfg.ProxyItems); idx++ {
+	for idx := range cfg.ProxyItems {
 		item := &cfg.ProxyItems[idx]
 
 		r.PathPrefix(item.Prefix).HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
@@ -76,9 +82,8 @@ func main() {
 		Handler:     r,
 		ReadTimeout: time.Second,
 	}
-	err = server.ListenAndServe()
 
-	if err != nil {
+	if err := server.ListenAndServe(); err != nil {
 		log.Fatal(err)
 	}
 }

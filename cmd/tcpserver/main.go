@@ -14,30 +14,32 @@ import (
 	"github.com/godruoyi/go-snowflake"
 )
 
+const (
+	transBufferSize = 40960
+	chBufferSize    = 100
+)
+
 var (
 	listen   string
 	asBinary bool
 
-	chSendText  = make(chan []byte, 100)
-	chSkip      = make(chan any, 100)
-	chTerminate = make(chan any, 100)
+	chSendText  = make(chan []byte, chBufferSize)
+	chSkip      = make(chan any, chBufferSize)
+	chTerminate = make(chan any, chBufferSize)
 
 	currentClient atomic.Uint64
 )
 
-func main() {
-	flag.StringVar(&listen, "listen", "127.0.0.1:12345", "listen address of server")
-	flag.BoolVar(&asBinary, "binary", false, "data print as binary, not text")
-
-	flag.Parse()
-
+func startServer() {
 	go func() {
 		listener, err := net.Listen("tcp", listen)
 		if err != nil {
 			log.Fatal(err)
 		}
 
-		defer listener.Close()
+		defer func(listener net.Listener) {
+			_ = listener.Close()
+		}(listener)
 
 		for {
 			conn, e := listener.Accept()
@@ -48,11 +50,18 @@ func main() {
 			processAConnect(conn, asBinary)
 		}
 	}()
+}
 
-	loop := true
+func main() {
+	flag.StringVar(&listen, "listen", "127.0.0.1:12345", "listen address of server")
+	flag.BoolVar(&asBinary, "binary", false, "data print as binary, not text")
+
+	flag.Parse()
+
+	startServer()
 
 	reader := bufio.NewReader(os.Stdin)
-	for loop {
+	for {
 		line, err := reader.ReadString('\n')
 		if err != nil {
 			log.Println("ReadString failed with ", err)
@@ -85,8 +94,6 @@ func main() {
 		line = strings.TrimRight(line, "\r\b\t ")
 
 		if line == "e" || line == "exit" {
-			loop = false
-
 			break
 		}
 
@@ -137,9 +144,9 @@ func processAConnect(conn net.Conn, asBinary bool) {
 	go func() {
 		defer cancel()
 
-		buf := make([]byte, 40960)
+		buf := make([]byte, transBufferSize)
 		for {
-			n, err := conn.Read(buf[:])
+			n, err := conn.Read(buf)
 			if terminating {
 				break
 			}
