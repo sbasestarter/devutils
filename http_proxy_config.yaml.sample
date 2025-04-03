@@ -1,7 +1,0 @@
-Listen: ":3000"
-StaticFs: "static"
-ProxyItems:
-  - Prefix: "/ssoserver"
-    Target: "http://127.0.0.1:14444"
-  - Prefix: "/ssoserver2"
-    Target: "http://127.0.0.1:12223"
